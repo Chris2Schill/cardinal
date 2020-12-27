@@ -17,7 +17,7 @@ mutex = Lock()
 message = "                \n                "
 
 
-lcd_display = lcd_display.LCD_Display()
+lcd_display = lcd_display.LCD_Display(screen_width = 16)
 	
 
 def signal_handler(sig, frame):
