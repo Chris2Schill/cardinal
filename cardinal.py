@@ -1,28 +1,61 @@
 import I2C_LCD_driver
 import os
 from time import sleep
+import signal
+import sys
 import urllib
 import hashlib
 
 LCD_WIDTH = 16
-MESSAGE_URL = 'http://chris-schilling.com'
+MESSAGE_URL = 'http://chris-schilling.com/cardinal/mom/'
+MESSAGE_PATH = 'message.txt'
+TWEET_PATH = 'tweet.wav'
+NETWORK_CONFIG_PATH = 'network_config.txt'
 shift = 0
 msg_hash = 0
 mylcd = I2C_LCD_driver.lcd()
 
+quit = 0
+
+def signal_handler(sig, frame):
+  global quit
+  print("You pressed Ctrl+C!")
+  quit = 1
+	
+
 def main():
-  while(1):
-    message = getMessage()
-    if messageChanged(message):
-      os.system("aplay cardinal_tweet.wav &")
-      mylcd.lcd_display_string("                ", 1)
-      mylcd.lcd_display_string("                ", 2)
-    displayMessage(message)
-    sleep(0.3)
+  signal.signal(signal.SIGINT, signal_handler)
+  while(quit == 0):
+    try:
+      writeNetworkConfig()
+      message = getMessage()
+      if messageChanged(message):
+        audioClip = urllib.urlopen(MESSAGE_URL+TWEET_PATH).read()
+        audio_file = open("tweet.wav", "w");
+        audio_file.write(audioClip)
+        audio_file.close()
+        os.system("aplay tweet.wav &")
+        mylcd.lcd_display_string("                ", 1)
+        mylcd.lcd_display_string("                ", 2)
+      displayMessage(message)
+    except Exception as e:
+	displayMessage(e)
+	print(e)
+    sleep(0.25)
+
+def writeNetworkConfig():
+  config = urllib.urlopen(MESSAGE_URL+NETWORK_CONFIG_PATH).read().split('\n')
+  SSID = config[0]
+  pswd = config[1]
+  config_str = "ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev\nupdate_config=1\ncountry=US\nnetwork={\nssid=\""+SSID+"\"\npsk=\""+pswd+"\"\nkey_mgmt=WPA-PSK\n}\n"
+  file = 	open("/etc/wpa_supplicant/wpa_supplicant.conf", "w")
+  file.write(config_str)
+  file.close()
 
 
 def getMessage():
-  return urllib.urlopen(MESSAGE_URL).read()
+  return urllib.urlopen(MESSAGE_URL+MESSAGE_PATH).read()
+
 
 def messageChanged(message):
   global msg_hash
