@@ -60,10 +60,9 @@ def url_request_thread():
     try:
       if is_connected("1.1.1.1"):
         config = requests.get(SERVER_URL+CONFIG_PATH).json()
-
         writeNetworkConfig(config['ssid'], config['passwd'])
-
         msg = config['message']
+
         if messageChanged(msg):
           getAndSaveAudioTweet(SERVER_URL+config['tweet'])
           os.system('aplay tweet.wav &')
