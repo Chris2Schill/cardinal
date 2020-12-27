@@ -2,19 +2,22 @@
 import I2C_LCD_driver
 
 class LCD_Display:
+  def __init__(self, screen_width):
+    self.LCD_WIDTH = screen_width
+    self.shift = 0
+    self.msg_width = 1
+    self.message = "                \n                "
+    self.clear_screen = False
+    self.lcd_driver = I2C_LCD_driver.lcd()
 
-  lcd_driver = I2C_LCD_driver.lcd()
-  clear_screen = False
-  message = "                \n                "
-  msg_width = 1
-  shift = 0
-  LCD_WIDTH = 16
-
+  # Clears the screen on the next frame to avoid lingering
+  # chars if a new message has less chars than the previous
   def request_clear_screen(self):
     self.clear_screen = True
     self.shift = 0
 
-
+  # Sets the message to display on screen. Takes a single string
+  # with lines delimited with \n
   def set_message(self, msg):
     if '\n' not in msg: msg = msg + '\n                '
     self.msg_width = 0
@@ -22,7 +25,7 @@ class LCD_Display:
       self.msg_width = max(self.msg_width, len(line))
     self.message = msg;
 
-  
+  # draw  
   def draw(self):
     if self.clear_screen:
       self.lcd_driver.lcd_display_string("                ", 1)
