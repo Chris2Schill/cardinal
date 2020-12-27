@@ -3,58 +3,119 @@ import os
 from time import sleep
 import signal
 import sys
-import urllib
 import hashlib
+import socket
+import requests
+import shutil
+import threading
+from threading import Thread, Lock
+
+SERVER_URL = 'http://chris-schilling.com/cardinal/mom/'
+CONFIG_PATH = 'config.json'
 
 LCD_WIDTH = 16
-SERVER_URL = 'http://chris-schilling.com/cardinal/mom/'
-MESSAGE_PATH = 'message.txt'
-TWEET_PATH = 'tweet.wav'
-NETWORK_CONFIG_PATH = 'network_config.txt'
 shift = 0
 msg_hash = 0
 mylcd = I2C_LCD_driver.lcd()
+quit = False
+messageLock = Lock()
+screenLock = Lock()
+message = "                \n                "
+clearScreen = False
 
-quit = 0
+	
 
 def signal_handler(sig, frame):
   global quit
-  print("You pressed Ctrl+C!")
-  quit = 1
-	
+  print('Exiting...')
+  quit = True
+
 
 def main():
+  global message
+  global clearScreen
   signal.signal(signal.SIGINT, signal_handler)
-  while(quit == 0):
+
+  t = Thread(target = url_request_thread)
+  t.start()
+
+  while(not quit):
     try:
-      writeNetworkConfig()
-      message = getMessage()
-      if messageChanged(message):
-        audioClip = urllib.urlopen(SERVER_URL+TWEET_PATH).read()
-        audio_file = open("tweet.wav", "w");
-        audio_file.write(audioClip)
-        audio_file.close()
-        os.system("aplay tweet.wav &")
+      with messageLock:
+        msg = message
+      if clearScreen: 
         mylcd.lcd_display_string("                ", 1)
         mylcd.lcd_display_string("                ", 2)
-      displayMessage(message)
+        clearScreen = False
+        
+      displayMessage(msg)
     except Exception as e:
-	displayMessage(e)
-	print(e)
+      print(e)
     sleep(0.25)
 
-def writeNetworkConfig():
-  config = urllib.urlopen(SERVER_URL+NETWORK_CONFIG_PATH).read().split('\n')
-  SSID = config[0]
-  pswd = config[1]
-  config_str = "ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev\nupdate_config=1\ncountry=US\nnetwork={\nssid=\""+SSID+"\"\npsk=\""+pswd+"\"\nkey_mgmt=WPA-PSK\n}\n"
-  file = 	open("/etc/wpa_supplicant/wpa_supplicant.conf", "w")
+
+def url_request_thread():
+  global quit
+  while(not quit):
+    try:
+      if is_connected("1.1.1.1"):
+        config = requests.get(SERVER_URL+CONFIG_PATH).json()
+
+        writeNetworkConfig(config['ssid'], config['passwd'])
+
+        msg = config['message']
+        if messageChanged(msg):
+          getAndSaveAudioTweet(SERVER_URL+config['tweet'])
+          os.system('aplay tweet.wav &')
+          print('Got new message:[' + ','.join(msg.split('\n')) + ']')
+          clearScreen = True
+      else:
+        msg = '  NO INTERNET   \n  CONNECTION    '
+    except Exception as e:
+      print(e)
+      msg = str(e)
+    updateMessage(msg)
+    sleep(1)
+
+
+def updateMessage(msg):
+  global message
+  with messageLock:
+    message = msg
+
+	
+def getAndSaveAudioTweet(url):
+  response = requests.get(url, stream=True)
+  with open("tweet.wav", "wb") as audio_file:
+    shutil.copyfileobj(response.raw, audio_file)
+
+
+def is_connected(hostname):
+  try:
+    # see if we can resolve the host name == tells us if there is
+    # DNS listening
+    host = socket.gethostbyname(hostname)
+    # connect to the host -- tells us if the host is actually reachable
+    s = socket.create_connection((host, 80), 2)
+    s.close()
+    return True
+  except:
+    pass
+  return False
+
+
+def writeNetworkConfig(ssid, passwd):
+  config_str = ('ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev\n'
+                'update_config=1\n'
+                'country=US\n'
+                'network={\n'
+                '   ssid="'+ssid+'"\n'
+                '   psk="'+passwd+'"\n'
+                '   key_mgmt=WPA-PSK\n'
+                '}\n')
+  file = open("/etc/wpa_supplicant/wpa_supplicant.conf", "w")
   file.write(config_str)
   file.close()
-
-
-def getMessage():
-  return urllib.urlopen(SERVER_URL+MESSAGE_PATH).read()
 
 
 def messageChanged(message):
@@ -68,26 +129,25 @@ def messageChanged(message):
   return 0
 
 
-def displayMessage(message):
+def displayMessage(msg):
   global shift
-  msg_lines = message.split('\n')
-  msg_width = getMessageWidth(msg_lines[0], msg_lines[1])
 
-  lcd_line1 = marqueeLine(msg_lines[0], shift) if shouldLineMarquee(msg_lines[0]) else msg_lines[0]
-  lcd_line2 = marqueeLine(msg_lines[1], shift) if shouldLineMarquee(msg_lines[1]) else msg_lines[1]
+  if '\n' not in msg: msg = msg + '\n                '
 
-  mylcd.lcd_display_string(lcd_line1[:LCD_WIDTH], 1)
-  mylcd.lcd_display_string(lcd_line2[:LCD_WIDTH], 2)
+  lines = msg.split('\n')
+
+  msg_width = 0
+  for i in range(len(lines)):
+    msg_width = max(msg_width, len(lines[i]))
+    if len(lines[i]) > LCD_WIDTH: lines[i] = marqueeLine(lines[i], shift)
+    mylcd.lcd_display_string(lines[i][:LCD_WIDTH], i+1)
+
   shift = (shift+1+msg_width) % msg_width
-
-def shouldLineMarquee(line):
-  return len(line) > LCD_WIDTH
+  
 
 def marqueeLine(line, shift):
   return line[shift:len(line)] + line[0:shift]
-  
-def getMessageWidth(line1, line2):
-  return max(len(line1), len(line2))
+
 
 if __name__ == "__main__":
   main()
