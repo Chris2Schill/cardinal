@@ -7,7 +7,7 @@ import urllib
 import hashlib
 
 LCD_WIDTH = 16
-MESSAGE_URL = 'http://chris-schilling.com/cardinal/mom/'
+SERVER_URL = 'http://chris-schilling.com/cardinal/mom/'
 MESSAGE_PATH = 'message.txt'
 TWEET_PATH = 'tweet.wav'
 NETWORK_CONFIG_PATH = 'network_config.txt'
@@ -30,7 +30,7 @@ def main():
       writeNetworkConfig()
       message = getMessage()
       if messageChanged(message):
-        audioClip = urllib.urlopen(MESSAGE_URL+TWEET_PATH).read()
+        audioClip = urllib.urlopen(SERVER_URL+TWEET_PATH).read()
         audio_file = open("tweet.wav", "w");
         audio_file.write(audioClip)
         audio_file.close()
@@ -44,7 +44,7 @@ def main():
     sleep(0.25)
 
 def writeNetworkConfig():
-  config = urllib.urlopen(MESSAGE_URL+NETWORK_CONFIG_PATH).read().split('\n')
+  config = urllib.urlopen(SERVER_URL+NETWORK_CONFIG_PATH).read().split('\n')
   SSID = config[0]
   pswd = config[1]
   config_str = "ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev\nupdate_config=1\ncountry=US\nnetwork={\nssid=\""+SSID+"\"\npsk=\""+pswd+"\"\nkey_mgmt=WPA-PSK\n}\n"
@@ -54,7 +54,7 @@ def writeNetworkConfig():
 
 
 def getMessage():
-  return urllib.urlopen(MESSAGE_URL+MESSAGE_PATH).read()
+  return urllib.urlopen(SERVER_URL+MESSAGE_PATH).read()
 
 
 def messageChanged(message):
